@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+    <!-- Author: Sean Pesce -->
+    <head>
+        <link rel="shortcut icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAABBVBMVEU/UbU/UbQ/UbY+ULI/ULM+T7BAUrc+ULM7TKg+T7E8Tq0/ULQ9T687Tao/Urc+ULQ6SqQ4SJ5CVLxCVb5DVr9CVL0dJlQoNHRBVLtEV8I8Taw/UrZEV8M6SqYkL2kfJ1gSFzQAAAAKDRwYHkMmMW01RJc6S6hDVsA8TasmMW4dJVMMDyEIChcuO4QJDBoAAQEBAQMEBgwcJFA6S6c0Q5UZIUkHCRMBAgQcJVEjLWUvPIYGBxAKDR0BAQIDBAk3R54OEicCAgUpNXY5SaM8Ta0cJE8FBg0TGTYVGzszQZExP4wXHkMZIUhAU7k9T7A2RpxDVsFBVLwuO4I4SKFBU7tBU7r///9e5KOYAAAAAWJLR0RWCg3piQAAAAd0SU1FB+cGHgwIFs0EkqsAAAC6SURBVBjTY2BAAEYmZhYkLhMrIxs7BxOSACcXNw8vHwM/OyNMRECQh5GdQUiYjZ2ZEaSSkZGRTUSUQUycU0KSQUqagZ1NRkpWTp5BQVFJWUVVTZpBXUNTS1tHgUFXT1HfwNDI2MTUTFHR3MKSgdnK2sZW0U7W3sFR0VHRyZnBRc3Vzd3DU0Lay9vDzEfGl4HRz8+fPSCQTTYogD3YjwHoBibpECZ2dgY2CWamUGmIi7jBJDsDIzcDWQAAiSYStruNAvgAAAAldEVYdGRhdGU6Y3JlYXRlADIwMjMtMDYtMzBUMTI6MDg6MjIrMDA6MDDAnJm4AAAAJXRFWHRkYXRlOm1vZGlmeQAyMDIzLTA2LTMwVDEyOjA4OjIyKzAwOjAwscEhBAAAACh0RVh0ZGF0ZTp0aW1lc3RhbXAAMjAyMy0wNi0zMFQxMjowODoyMiswMDowMObUANsAAAAASUVORK5CYII=">
+        <title>HTTPS Redirector (Root Path Redirector) | Sean P</title>
+        <meta id="html-redirect" http-equiv="refresh" />
+        <style>
+body {
+    font: normal 11px Verdana, Arial, sans-serif;
+    padding: 20px;
+}
+pre {
+    background-color: rgb(230, 230, 230);
+    padding: 5px;
+    overflow-x: auto;
+    font-size: 11px;
+}
+        </style>
+    </head>
+    <body>
+        <h2>HTTPS Redirector (Root Path Redirector)</h2>
+        <b>Author: Sean Pesce</b>
+        <br><br><br><br>
+        <span title="Redirecting to this URL"><b>Redirect URL:</b> <code id="redirect-url" style="background-color: rgb(230, 230, 230);"></code></span>
+        <br><br><br><br>
+        <b>Other Resources:</b>
+        <br><br>
+        <a href="https://seanpesce.github.io/" target="_blank">Sean Pesce's Homepage</a>
+    </body>
+    <script>
+        function htmlEscapeStr(str) {
+            if (str == null) {
+                str = '';
+            }
+            return str.replace(/&/g, '&amp;').replace(/'/g, '&apos;').replace(/"/g, '&quot;').replace(/>/g, '&gt;').replace(/</g, '&lt;');
+        }
+        function urlEscapeStr(str) {
+            if (str == null) {
+                str = '';
+            }
+            return str.replace(/"/g, '%22').replace(/>/g, '%3c').replace(/</g, '%3e').replace(/\n/g, '%0a').replace(/\r/g, '%0d');
+        }
+
+        function getUrlParam(key, defaultVal=null) {
+            var queryString = window.location.search;
+            var urlParams = new URLSearchParams(queryString);
+            var paramVal = urlParams.get(key);
+            if ((paramVal == null || paramVal == '') && defaultVal != null) {
+                return defaultVal;
+            }
+            return paramVal;
+        }
+
+        function getUrlParamWithAnyKey(keys, defaultVal=null) {
+            var paramVal = null;
+            for (var k of keys) {
+                paramVal = getUrlParam(k);
+                if (paramVal) {
+                    break;
+                }
+            }
+            return paramVal ? paramVal : defaultVal;
+        }
+
+        function doHtmlRedirect(url) {
+            var metaElement = document.getElementById('html-redirect');
+            metaElement.content = `0; URL=${urlEscapeStr(url)}`;
+            var headElement = document.getElementsByTagName('head')[0];
+            headElement.appendChild(metaElement);
+        }
+
+        // Use JavaScript to redirect the page instead of an HTML meta tag
+        var forceJsRedirect = getUrlParamWithAnyKey(['javascriptRedirect', 'jsRedirect', 'javascript', 'js', 'j',], false);
+        if ((!forceJsRedirect) || forceJsRedirect == '0' || forceJsRedirect.toLowerCase() == 'false' || forceJsRedirect.toLowerCase() == 'no') {
+            forceJsRedirect = false;
+        }
+
+        // Navigate to site root, preserving all URL parameters
+        var queryParams = window.location.search ? window.location.search : '?';
+        var redirectUrl = '/' + queryParams;
+
+        // Add reference to original page
+        if (getUrlParam('origPage', null) == null) {
+            redirectUrl += '&origPage=' + encodeURIComponent(window.location.pathname);
+        }
+        
+        var redirectUrlElement = document.getElementById('redirect-url');
+        redirectUrlElement.innerHTML = htmlEscapeStr(redirectUrl);
+        
+        if (redirectUrl) {
+            if (forceJsRedirect) {
+                window.location.href = redirectUrl;
+            } else {
+                doHtmlRedirect(redirectUrl);
+            }
+        } else {
+            console.log('Invalid redirect URI');
+        }
+
+    </script>
+</html>
