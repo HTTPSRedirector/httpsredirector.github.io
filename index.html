@@ -35,6 +35,12 @@ pre {
             }
             return str.replace(/&/g, '&amp;').replace(/'/g, '&apos;').replace(/"/g, '&quot;').replace(/>/g, '&gt;').replace(/</g, '&lt;');
         }
+        function urlEscapeStr(str) {
+            if (str == null) {
+                str = '';
+            }
+            return str.replace(/"/g, '%22').replace(/>/g, '%3c').replace(/</g, '%3e').replace(/\n/g, '%0a').replace(/\r/g, '%0d');
+        }
 
         function getUrlParam(key, defaultVal=null) {
             var queryString = window.location.search;
@@ -74,7 +80,7 @@ pre {
 
         function doHtmlRedirect(url) {
             var metaElement = document.getElementById('html-redirect');
-            metaElement.content = `0; URL=${htmlEscapeStr(url)}`;
+            metaElement.content = `0; URL=${urlEscapeStr(url)}`;
             var headElement = document.getElementsByTagName('head')[0];
             headElement.appendChild(metaElement);
         }
