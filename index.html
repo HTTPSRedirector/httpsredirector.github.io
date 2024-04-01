@@ -22,7 +22,11 @@ pre {
         <h2>HTTPS Redirector</h2>
         <b>Author: Sean Pesce</b>
         <br><br><br><br>
-        <span title="Redirecting to this URL"><b>Redirect URL:</b> <code id="redirect-url" style="background-color: rgb(230, 230, 230);"></code></span>
+        <span title="Redirecting to this URL"><b>Redirect URL:</b> <!-- <code id="redirect-url" style="background-color: rgb(230, 230, 230);"></code> --></span>
+        <br>
+        <input type="text" id="redirect-url" name="redirect-url" placeholder="https://example.com" style="margin-top:5px;width:80%;" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" >
+        <br>
+        <button type="button" id="redirect-button" style="margin-top:5px; font-size:1.875em;" onclick="doRedirect(true)">Redirect</button>
         <br><br><br><br>
         <b>Other Resources:</b>
         <br><br>
@@ -63,9 +67,14 @@ pre {
             return paramVal ? paramVal : defaultVal;
         }
 
-        function fixRedirectUrl(url, allowUnsafe) {
+        function fixRedirectUrl(url) {
             if (!url) {
                 return '';
+            }
+            // Allow "javascript:" and "data:" URLs
+            var allowUnsafe = getUrlParamWithAnyKey(['unsafe', 'dangerous',], false);
+            if ((!allowUnsafe) || allowUnsafe == '0' || allowUnsafe.toLowerCase() == 'false' || allowUnsafe.toLowerCase() == 'no') {
+                allowUnsafe = false;
             }
             if ((!allowUnsafe) && (url.toLowerCase().startsWith('data:') || url.toLowerCase().startsWith('javascript:'))) {
                 console.log('Unsafe redirect URI (use parameter "unsafe=1" for these kinds of URLs): ' + url);
@@ -78,6 +87,15 @@ pre {
             return url;
         }
 
+        function getRedirectUrl() {
+            var redirectUrl = document.getElementById('redirect-url').value;
+            if (!redirectUrl) {
+                redirectUrl = getUrlParamWithAnyKey(['redirectUrl', 'redirect', 'url', 'uri', 'r', 'u',], null);
+            }
+            redirectUrl = fixRedirectUrl(redirectUrl);
+            return redirectUrl;
+        }
+
         function doHtmlRedirect(url) {
             var metaElement = document.getElementById('html-redirect');
             metaElement.content = `0; URL=${urlEscapeStr(url)}`;
@@ -85,32 +103,40 @@ pre {
             headElement.appendChild(metaElement);
         }
 
-        // Use JavaScript to redirect the page instead of an HTML meta tag
-        var forceJsRedirect = getUrlParamWithAnyKey(['javascriptRedirect', 'jsRedirect', 'javascript', 'js', 'j',], false);
-        if ((!forceJsRedirect) || forceJsRedirect == '0' || forceJsRedirect.toLowerCase() == 'false' || forceJsRedirect.toLowerCase() == 'no') {
-            forceJsRedirect = false;
-        }
+        function doRedirect(fromButton) {
+            var redirectUrl = getRedirectUrl();
+            if (!redirectUrl) {
+                var msg = 'Invalid redirect URI';
+                console.log(msg);
+                if (fromButton) {
+                    alert(msg);
+                }
+                return;
+            }
 
-        // Allow "javascript:" and "data:" URLs
-        var allowJsUri = getUrlParamWithAnyKey(['unsafe', 'dangerous',], false);
-        if ((!allowJsUri) || allowJsUri == '0' || allowJsUri.toLowerCase() == 'false' || allowJsUri.toLowerCase() == 'no') {
-            allowJsUri = false;
-        }
+            // Use JavaScript to redirect the page instead of an HTML meta tag
+            var forceJsRedirect = getUrlParamWithAnyKey(['javascriptRedirect', 'jsRedirect', 'javascript', 'js', 'j',], false);
+            if ((!forceJsRedirect) || forceJsRedirect == '0' || forceJsRedirect.toLowerCase() == 'false' || forceJsRedirect.toLowerCase() == 'no') {
+                forceJsRedirect = false;
+            }
 
-        var redirectUrl = getUrlParamWithAnyKey(['redirectUrl', 'redirect', 'url', 'uri', 'r', 'u',], null);
-        redirectUrl = fixRedirectUrl(redirectUrl, allowJsUri);
-        var redirectUrlElement = document.getElementById('redirect-url');
-        redirectUrlElement.innerHTML = htmlEscapeStr(redirectUrl);
-        
-        if (redirectUrl) {
+            // Allow "javascript:" and "data:" URLs
+            var allowJsUri = getUrlParamWithAnyKey(['unsafe', 'dangerous',], false);
+            if ((!allowJsUri) || allowJsUri == '0' || allowJsUri.toLowerCase() == 'false' || allowJsUri.toLowerCase() == 'no') {
+                allowJsUri = false;
+            }
+
             if (forceJsRedirect || redirectUrl.toLowerCase().startsWith('javascript:')) {
                 window.location.href = redirectUrl;
             } else {
                 doHtmlRedirect(redirectUrl);
             }
-        } else {
-            console.log('Invalid redirect URI');
         }
 
+        var redirectUrl = getRedirectUrl();
+        var redirectUrlElement = document.getElementById('redirect-url').value = redirectUrl;
+        // redirectUrlElement.innerHTML = htmlEscapeStr(redirectUrl);
+        
+        doRedirect();
     </script>
 </html>
