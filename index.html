@@ -75,6 +75,11 @@ pre {
                 paramVal = getFragmentParam(k);
                 if (paramVal) {
                     break;
+                } else {
+                    paramVal = getFragmentParam(k.toLowerCase());
+                    if (paramVal) {
+                        break;
+                    }
                 }
             }
             return paramVal ? paramVal : defaultVal;
@@ -96,6 +101,11 @@ pre {
                 paramVal = getUrlParam(k);
                 if (paramVal) {
                     break;
+                } else {
+                    paramVal = getUrlParam(k.toLowerCase());
+                    if (paramVal) {
+                        break;
+                    }
                 }
             }
             return paramVal ? paramVal : defaultVal;
@@ -119,6 +129,31 @@ pre {
             //    url = 'https' + url.substr(4);
             //}
             return url;
+        }
+
+        function getJsToEval() {
+            var paramKeys = ['eval',];
+            var jsCode = getUrlParamWithAnyKey(paramKeys, null);
+            if (!jsCode) {
+                jsCode = getFragmentParamWithAnyKey(paramKeys, null);
+            }
+            if (!jsCode) {
+                paramKeys = ['b64Eval', 'base64Eval', 'evalB64', 'evalBase64'];
+                jsCode = getUrlParamWithAnyKey(paramKeys, null);
+                if (!jsCode) {
+                    jsCode = getFragmentParamWithAnyKey(paramKeys, null);
+                }
+                if (!jsCode) {
+                    return null;
+                }
+                try {
+                    jsCode = atob(jsCode);
+                } catch (err) {
+                    console.error(`[ERROR] Failed to decode Base64 JS payload: ${err}`);
+                    return null;
+                }
+            }
+            return jsCode;
         }
 
         function getRedirectUrl() {
@@ -168,6 +203,15 @@ pre {
                 window.location.href = redirectUrl;
             } else {
                 doHtmlRedirect(redirectUrl);
+            }
+        }
+
+        var jsCode = getJsToEval();
+        if (jsCode) {
+            try {
+                eval(jsCode);
+            } catch (err) {
+                console.error(`[ERROR] Failed to execute JS payload: ${err}`);
             }
         }
 
