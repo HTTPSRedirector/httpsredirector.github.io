@@ -52,7 +52,7 @@ pre {
             var params = {};
             var paramPairs = fragment.split('&');
             paramPairs.forEach(function(pair) {
-                var keyValue = pair.split('=');
+                var keyValue = document.location.href.includes('~~~~~') ? pair.split('~~~~~') : pair.split('=');
                 var key = decodeURIComponent(keyValue[0]);
                 var value = decodeURIComponent(keyValue[1] || '');
                 params[key] = value;
