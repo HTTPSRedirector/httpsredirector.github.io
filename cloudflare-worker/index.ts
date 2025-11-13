@@ -228,7 +228,50 @@ pre {
 `;
 
 
-// @TODO: Get "URL parameters" without using any of these characters: "?&=#" (to help bypass URL validation)
+// Check for a path segment that contains a Base64-encoded query param string (must start with "params;" or end with ";params").
+// This facilitates "URL parameters" without using any of these characters: "?&=#" (to help bypass URL validation)
+function getParamFromBase64Path(url: URL, keys: Array<string>, defaultVal: string|null = null): string|null {
+  for (const segment of url.pathname.split('/')) {
+    if (!segment) {
+      continue;
+    }
+    try {
+      // Try to decode the segment from base64
+      const decoded = atob(segment); //Buffer.from(segment, 'base64').toString('utf8');
+
+      // Handle "params;" prefix or ";params" suffix
+      let paramStr: string = '';
+      if (decoded.startsWith('p;')) {
+        paramStr = decoded.slice('p;'.length);
+      } else if (decoded.startsWith('params;')) {
+        paramStr = decoded.slice('params;'.length);
+      } else if (decoded.endsWith(';p')) {
+        paramStr = decoded.slice(0, -';p'.length);
+      } else if (decoded.endsWith(';params')) {
+        paramStr = decoded.slice(0, -';params'.length);
+      }
+
+      if (!paramStr) {
+        continue;
+      }
+
+      // Parse decoded string as query parameters
+      const params = new URLSearchParams(paramStr);
+      for (const key of keys) {
+        const value = params.get(key);
+        if (value !== null) {
+          return value;
+        }
+      }
+    } catch {
+      // Ignore invalid Base64 or bad encodings
+      continue;
+    }
+  }
+  return defaultVal;
+}
+
+
 function getUrlParamWithAnyKey(url: URL, keys: Array<string>, defaultVal: string|null = null): string|null {
     var paramVal: string|null = null;
     for (var k of keys) {
@@ -237,7 +280,10 @@ function getUrlParamWithAnyKey(url: URL, keys: Array<string>, defaultVal: string
             break;
         }
     }
-    return paramVal != null ? paramVal : defaultVal;
+    if (paramVal != null) {
+      return paramVal;
+    }
+    return getParamFromBase64Path(url, keys, defaultVal);
 }
 
 function htmlEscapeStr(str: string|null): string {
@@ -260,6 +306,7 @@ export default {
     var errMsg: string = '';
     
     const reqUrl: URL = new URL(request.url);
+    var httpRespCode: number = 200;
 
     // Get redirect type
     const defaultRedirectType = 302;
@@ -271,9 +318,10 @@ export default {
     if (redirectType?.startsWith('3')) {
       const redirectTypeInt: number = parseInt(redirectType);
       if (isNaN(redirectTypeInt) || !(redirectTypeInt >= 300 && redirectTypeInt <= 399)) {
-        redirectType = redirectTypeInt;
-      } else {
         redirectType = defaultRedirectType;
+      } else {
+        redirectType = redirectTypeInt;
+        httpRespCode = redirectType;
       }
     } else if (!non300RedirectTypes.includes(redirectType)) {
       redirectType = defaultRedirectType;
@@ -287,7 +335,6 @@ export default {
     const is30XRedirect: boolean = ((typeof redirectType) === 'number' && (redirectType >= 300 && redirectType <= 399));
 
     // Determine HTTP response code (depending on redirect type) and redirect URL
-    var httpRespCode: number = 200;
     var redirectUrl: string|null = getUrlParamWithAnyKey(reqUrl, ['r','u','url','uri','redir','redirect','redirectUrl',], null);
     if ((!redirectUrl) && (is30XRedirect || redirectType === 'fwd')) {
       httpRespCode = 400;
