@@ -9,10 +9,13 @@
 //       - Select "No" for "Do you want to deploy your application?"
 //   cd $WORKER_NAME
 //   - Put this code in src/index.ts
+//   - If email functionality is desired, run "npm install mimetext" and copy wrangler.jsonc to the root directory (see here for setup instructions: https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/ )
 //
 // Deploy:
 //   npx wrangler deploy
 
+import { EmailMessage } from 'cloudflare:email';
+import { createMimeMessage } from 'mimetext';
 
 // Template modified from https://github.com/HTTPSRedirector/httpsredirector.github.io/blob/main/index.html
 const HTML_TEMPLATE = `
@@ -307,6 +310,7 @@ export default {
     
     const reqUrl: URL = new URL(request.url);
     var httpRespCode: number = 200;
+    const emailSender = atob('bW9jL' + 'nJvdGNlcmlkZ' + 'XJzcHR0aEBuYWVz').split('').reverse().join('');
 
     // Get redirect type
     const defaultRedirectType = 302;
@@ -351,18 +355,46 @@ export default {
       reqHeaders[hdrName] = hdrValue;
     }
     var requestBody = await request.text();
+    
+    const fwdReqBody: { [key: string]: string|null|{[key:string]:string} } = {};
+    fwdReqBody.method = request.method;
+    fwdReqBody.url = request.url;
+    fwdReqBody.headers = reqHeaders;
+    if (requestBody) {
+      fwdReqBody.body = requestBody;
+    } else {
+      fwdReqBody.body = null;
+    }
+    
+    // Send an email alert, if desired
+    const emailAlertRecipient: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['email','e',], null);
+    if (emailAlertRecipient) {
+      var emailAlertSubject: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailSubject','eSub','esub',], null);
+      if (!emailAlertSubject) {
+        emailAlertSubject = `[HTTPS Redirector] Received request (${(new Date()).toUTCString()})`;
+      }
+      const msg = createMimeMessage();
+      msg.setSender({ name: 'HTTPSRedirector', addr: emailSender });
+      msg.setRecipient(emailAlertRecipient);
+      msg.setSubject(emailAlertSubject);
+      msg.addMessage({
+        contentType: 'text/plain',
+        data: JSON.stringify(fwdReqBody, null, '  '),
+      });
+      var message = new EmailMessage(
+        emailSender,
+        emailAlertRecipient,
+        msg.asRaw(),
+      );
+      try {
+        await env.email_binding1.send(message);
+      } catch (err) {
+        console.log(`[WARNING] Failed to send email to ${emailAlertRecipient}: ${err}`);
+      }
+    }
 
     if (redirectType === 'fwd') {
       // Forward the request to a secondary server
-      const fwdReqBody: { [key: string]: string|null|{[key:string]:string} } = {};
-      fwdReqBody.method = request.method;
-      fwdReqBody.url = request.url;
-      fwdReqBody.headers = reqHeaders;
-      if (requestBody) {
-        fwdReqBody.body = requestBody;
-      } else {
-        fwdReqBody.body = null;
-      }
       const fwdedResponse = await fetch(`${redirectUrl}`, {
         method: 'POST',
         headers: {
