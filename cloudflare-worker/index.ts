@@ -383,7 +383,10 @@ export default {
       // Get a unique ID to track this set of email alerts
       var emailGroupId: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailId','eId','eid',], null);
       if (!emailGroupId) {
-          emailGroupId = `${Date.now()}`;
+        //emailGroupId = `${Date.now()}`;
+        const errMsg: string = `[ERROR] Missing email group ID. Use the "eid" URL query parameter to provide one.`;
+        console.log(errMsg);
+        return new Response(errMsg, { status: 400 });
       }
       if (emailGroupId.length > MAX_EMAIL_GROUP_ID_LEN) {
         const errMsg: string = `[ERROR] Email group ID too long (should be ${MAX_EMAIL_GROUP_ID_LEN} characters or less): ${emailGroupId}`;
@@ -396,16 +399,16 @@ export default {
         // Determine maximum number of emails that can be sent within the given interval
         var emailLimit: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailLimit','eLimit','elimit',], DEFAULT_EMAIL_LIMIT);
         if  ((!emailLimit) || (!parseInt(emailLimit)) || isNaN(parseInt(emailLimit)) || parseInt(emailLimit) <= 0 || parseInt(emailLimit) > 100) {
-            emailLimit = DEFAULT_EMAIL_LIMIT;
+          emailLimit = DEFAULT_EMAIL_LIMIT;
         } else {
-            emailLimit = parseInt(emailLimit);
+          emailLimit = parseInt(emailLimit);
         }
         // Determine number of hours before the email alert limit is cleared
         var emailLimitInterval: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailLimitInterval','eInterval','einterval','eint',], DEFAULT_EMAIL_LIMIT_INTERVAL_HRS);
-        if  ((!emailLimitInterval) || (!parseInt(emailLimitInterval)) || isNaN(parseInt(emailLimitInterval)) || parseInt(emailLimitInterval) <= 0) {
-            emailLimitInterval = DEFAULT_EMAIL_LIMIT_INTERVAL_HRS;
+        if ((!emailLimitInterval) || (!parseInt(emailLimitInterval)) || isNaN(parseInt(emailLimitInterval)) || parseInt(emailLimitInterval) <= 0) {
+          emailLimitInterval = DEFAULT_EMAIL_LIMIT_INTERVAL_HRS;
         } else {
-            emailLimitInterval = parseInt(emailLimitInterval);
+          emailLimitInterval = parseInt(emailLimitInterval);
         }
         
         emailGroupData = {
@@ -455,9 +458,9 @@ export default {
         return new Response(errMsg, { status: 400 });
       }
     } else if (redirectType == 'email') {
-        const msg: string = `[ERROR] A recipient email address must be provided for the "${redirectType}" action. Use the "email" URL query parameter to provide one.`;
-        console.log(msg);
-        return new Response(msg, { status: 400 });
+      const msg: string = `[ERROR] A recipient email address must be provided for the "${redirectType}" action. Use the "email" URL query parameter to provide one.`;
+      console.log(msg);
+      return new Response(msg, { status: 400 });
     }
 
     if (redirectType === 'fwd') {
