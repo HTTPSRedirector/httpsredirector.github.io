@@ -428,7 +428,7 @@ export default {
       // Get/create subject of email message
       var emailAlertSubject: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailSubject','eSub','esub',], null);
       if (!emailAlertSubject) {
-        emailAlertSubject = `[HTTPS Redirector] (${emailGroupData.count+1}/${emailGroupData.max}) Received request (${(new Date()).toUTCString()})`;
+        emailAlertSubject = `[HTTPS Redirector] (${emailGroupId}) (${emailGroupData.count+1}/${emailGroupData.max}) Received request (${(new Date()).toUTCString()})`;
       }
       const msg = createMimeMessage();
       msg.setSender({ name: 'HTTPSRedirector', addr: emailSender });
