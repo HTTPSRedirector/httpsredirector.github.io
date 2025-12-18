@@ -9,7 +9,15 @@
 //       - Select "No" for "Do you want to deploy your application?"
 //   cd $WORKER_NAME
 //   - Put this code in src/index.ts
-//   - If email functionality is desired, run "npm install mimetext" and copy wrangler.jsonc to the root directory (see here for setup instructions: https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/ )
+//
+//   - If email functionality is desired:
+//       - See here for Email Worker setup instructions: https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/
+//       - Run "npm install mimetext"
+//       - Copy wrangler.jsonc to the root directory
+//       - Set emailSender to an email address on a domain with Email Routing active
+//       - Create a Workers KV instance:
+//           - https://developers.cloudflare.com/kv/
+//       - Copy the KV instance hex ID into the kv_namespaces->id field in wrangler.jsonc
 //
 // Deploy:
 //   npx wrangler deploy
@@ -310,12 +318,12 @@ export default {
     
     const reqUrl: URL = new URL(request.url);
     var httpRespCode: number = 200;
-    const emailSender = atob('bW9jL' + 'nJvdGNlcmlkZ' + 'XJzcHR0aEBuYWVz').split('').reverse().join('');
+    const emailSender: string = atob('bW9jL' + 'nJvdGNlcmlkZ' + 'XJzcHR0aEBuYWVz').split('').reverse().join('');  // Sender address must be an email from a domain with Email Routing active
 
     // Get redirect type
-    const defaultRedirectType = 302;
+    const defaultRedirectType: number = 302;
     const altNoRedirectKeys: Array<string|number|null|undefined> = ['0', 'no', 'false', 'null',];
-    var non300RedirectTypes: Array<string|number|null|undefined> = ['js', 'javascript', 'html', 'none', 'fwd', 'forward',];
+    var non300RedirectTypes: Array<string|number|null|undefined> = ['js', 'javascript', 'html', 'none', 'fwd', 'forward', 'email',];
     non300RedirectTypes = non300RedirectTypes.concat(altNoRedirectKeys);
     var redirectType: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['redirectType','rt',], `${defaultRedirectType}`);
     redirectType = redirectType?.trim().toLowerCase();
@@ -369,17 +377,64 @@ export default {
     // Send an email alert, if desired
     const emailAlertRecipient: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['email','e',], null);
     if (emailAlertRecipient) {
+      const MAX_EMAIL_GROUP_ID_LEN: number = 100;
+      const DEFAULT_EMAIL_LIMIT: number = 5;
+      const DEFAULT_EMAIL_LIMIT_INTERVAL_HRS: number = 12;  // Hours
+      // Get a unique ID to track this set of email alerts
+      var emailGroupId: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailId','eId','eid',], null);
+      if (!emailGroupId) {
+          emailGroupId = `${Date.now()}`;
+      }
+      if (emailGroupId.length > MAX_EMAIL_GROUP_ID_LEN) {
+        const errMsg: string = `[ERROR] Email group ID too long (should be ${MAX_EMAIL_GROUP_ID_LEN} characters or less): ${emailGroupId}`;
+        console.log(errMsg);
+        return new Response(errMsg, { status: 400 });
+      }
+      
+      var emailGroupData = await env.kv_httpsredirector_email_tracker.get(emailGroupId, 'json');
+      if (!emailGroupData) {
+        // Determine maximum number of emails that can be sent within the given interval
+        var emailLimit: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailLimit','eLimit','elimit',], DEFAULT_EMAIL_LIMIT);
+        if  ((!emailLimit) || (!parseInt(emailLimit)) || isNaN(parseInt(emailLimit)) || parseInt(emailLimit) <= 0 || parseInt(emailLimit) > 100) {
+            emailLimit = DEFAULT_EMAIL_LIMIT;
+        } else {
+            emailLimit = parseInt(emailLimit);
+        }
+        // Determine number of hours before the email alert limit is cleared
+        var emailLimitInterval: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailLimitInterval','eInterval','einterval','eint',], DEFAULT_EMAIL_LIMIT_INTERVAL_HRS);
+        if  ((!emailLimitInterval) || (!parseInt(emailLimitInterval)) || isNaN(parseInt(emailLimitInterval)) || parseInt(emailLimitInterval) <= 0) {
+            emailLimitInterval = DEFAULT_EMAIL_LIMIT_INTERVAL_HRS;
+        } else {
+            emailLimitInterval = parseInt(emailLimitInterval);
+        }
+        
+        emailGroupData = {
+          'count': 0,
+          'max': emailLimit,
+          'expire': Math.floor(Date.now()/1000) + (emailLimitInterval*3600),  // Seconds
+        }
+      }
+      
+      // Check if the limit was reached
+      if (emailGroupData.count >= emailGroupData.max) {
+        const msg: string = `[ERROR] Email send limit reached for ID ${emailGroupId} (limit: ${emailGroupData.max} ; reset: ${emailGroupData.expire})`;
+        console.log(msg);
+        return new Response(msg, { status: 400 });
+      }
+      
+      // Get/create subject of email message
       var emailAlertSubject: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailSubject','eSub','esub',], null);
       if (!emailAlertSubject) {
-        emailAlertSubject = `[HTTPS Redirector] Received request (${(new Date()).toUTCString()})`;
+        emailAlertSubject = `[HTTPS Redirector] (${emailGroupData.count+1}/${emailGroupData.max}) Received request (${(new Date()).toUTCString()})`;
       }
       const msg = createMimeMessage();
       msg.setSender({ name: 'HTTPSRedirector', addr: emailSender });
       msg.setRecipient(emailAlertRecipient);
       msg.setSubject(emailAlertSubject);
+      var msgBody = JSON.stringify(fwdReqBody, null, '  ');
       msg.addMessage({
         contentType: 'text/plain',
-        data: JSON.stringify(fwdReqBody, null, '  '),
+        data: msgBody,
       });
       var message = new EmailMessage(
         emailSender,
@@ -388,9 +443,21 @@ export default {
       );
       try {
         await env.email_binding1.send(message);
+        // Track emails for this group/ID
+        emailGroupData.count += 1;
+        await env.kv_httpsredirector_email_tracker.put(emailGroupId, JSON.stringify(emailGroupData), {expiration:emailGroupData.expire, metadata:{},});
+        if (redirectType == 'email') {
+          return new Response(`Email sent (${emailGroupData.count}/${emailGroupData.max})`, { status: 200 });
+        }
       } catch (err) {
-        console.log(`[WARNING] Failed to send email to ${emailAlertRecipient}: ${err}`);
+        const errMsg: string = `[ERROR] Failed to send email to ${emailAlertRecipient}: ${err}`;
+        console.log(errMsg);
+        return new Response(errMsg, { status: 400 });
       }
+    } else if (redirectType == 'email') {
+        const msg: string = `[ERROR] A recipient email address must be provided for the "${redirectType}" action. Use the "email" URL query parameter to provide one.`;
+        console.log(msg);
+        return new Response(msg, { status: 400 });
     }
 
     if (redirectType === 'fwd') {
