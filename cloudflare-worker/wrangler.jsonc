@@ -9,17 +9,23 @@
 	"name": "httpsredirector",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-11-06",
-    "compatibility_flags": [
-        "nodejs_compat"
-    ],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
 	"observability": {
 		"enabled": true
 	},
-    "send_email": [
-        {
-          "name": "email_binding1"
-        }
-    ]
+  "send_email": [
+    {
+      "name": "email_binding1"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "kv_httpsredirector_email_tracker",
+      "id": "342654447441416db942e0f3e305944f"
+    }
+  ]
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
