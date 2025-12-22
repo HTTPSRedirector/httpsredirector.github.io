@@ -434,7 +434,10 @@ export default {
       msg.setSender({ name: 'HTTPSRedirector', addr: emailSender });
       msg.setRecipient(emailAlertRecipient);
       msg.setSubject(emailAlertSubject);
-      var msgBody = JSON.stringify(fwdReqBody, null, '  ');
+      var msgBody: string|number|null|undefined = getUrlParamWithAnyKey(reqUrl, ['emailBody','emailMsg','eBody','eMsg','ebody','emsg',], null);
+      if (!msgBody) {
+        msgBody = JSON.stringify(fwdReqBody, null, '  ');
+      }
       msg.addMessage({
         contentType: 'text/plain',
         data: msgBody,
