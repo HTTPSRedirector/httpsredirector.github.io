@@ -239,6 +239,141 @@ pre {
 `;
 
 
+function xorString(str: string|null, key: string): string|null {
+  if (str == null) {
+    return null;
+  }
+  if (!str) {
+      return '';
+  }
+  if (!key) {
+    return str;
+  }
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const strCharCode = str.charCodeAt(i);
+    const keyCharCode = key.charCodeAt(i % key.length);
+    const xoredCharCode = strCharCode ^ keyCharCode;
+    result += String.fromCharCode(xoredCharCode);
+  }
+  return result;
+}
+
+
+// Converts a URLSearchParams to a generic JavaScript object
+function queryParamsToObject(params: URLSearchParams) {
+  return JSON.parse('{"' + params.toString().replace(/&/g, '","').replace(/=/g,'":"') + '"}', function(key, value) { return key===""?value:decodeURIComponent(value) });
+}
+
+
+// Find all encrypted query parameters (with a corresponding decryption key) and return the decrypted values
+function getEncryptedQueryParams(url: URL) {
+  const allParams = new URLSearchParams([...url.searchParams, ...getParamsFromAllBase64Paths(url)]);
+  const encryptionKeyPrefix = 'dk';
+  const encryptionKeyGlobalKey = `${encryptionKeyPrefix}G`
+  const encryptionKeyGlobal = allParams.get(encryptionKeyGlobalKey);
+  const encryptedGenericPrefix = 'ed';
+  const encryptedParams = {};
+  const decryptedParams = {};
+  for (const [key, value] of allParams) {
+    try {
+      if (key.startsWith(encryptionKeyPrefix)) {
+        const dataKey = key.substring(encryptionKeyPrefix.length);
+        const encData = allParams.get(dataKey);
+        if (!encData) {
+          continue;
+        }
+        encryptedParams[key] = {};
+        encryptedParams[key]['key'] = value;
+        encryptedParams[key]['data'] = encData;
+      } else if (encryptionKeyGlobal && key.startsWith(encryptedGenericPrefix)) {
+        const dataKey = key.substring(encryptedGenericPrefix.length);
+        const encData = value;
+        if (!encData) {
+          continue;
+        }
+        encryptedParams[dataKey] = {};
+        encryptedParams[dataKey]['key'] = encryptionKeyGlobal;
+        encryptedParams[dataKey]['data'] = encData;
+      }
+    } catch (err) {
+      console.log(`[WARNING] Failed to parse encrypted query params: ${err}`);
+    }
+  }
+  for (const k of Object.keys(encryptedParams)) {
+    try {
+      const encData = atob(encryptedParams[k]['data']);
+      const decData = xorString(encData, encryptedParams[k]['key']);
+      decryptedParams[k] = decData;
+    } catch (err) {
+      console.log(`[WARNING] Failed to parse encrypted query param "${k}": ${err}`);
+    }
+  }
+  return decryptedParams;
+}
+
+
+// Try to decode a Base64-encoded query parameter string (must start with "params;" or end with ";params").
+function decodeB64Params(b64Params: string): URLSearchParams|null {
+  if (!b64Params) {
+    return null;
+  }
+  try {
+    // Try to decode the param string from base64
+    const decoded = atob(b64Params); //Buffer.from(b64Params, 'base64').toString('utf8');
+
+    // Handle "params;" prefix or ";params" suffix
+    let paramStr: string = '';
+    if (decoded.startsWith('p;')) {
+      paramStr = decoded.slice('p;'.length);
+    } else if (decoded.startsWith('params;')) {
+      paramStr = decoded.slice('params;'.length);
+    } else if (decoded.endsWith(';p')) {
+      paramStr = decoded.slice(0, -';p'.length);
+    } else if (decoded.endsWith(';params')) {
+      paramStr = decoded.slice(0, -';params'.length);
+    }
+
+    if (!paramStr) {
+      return null;
+    }
+
+    // Parse decoded string as query parameters
+    const params = new URLSearchParams(paramStr);
+    if (params && params.size > 0) {
+      return params;
+    }
+  } catch (err) {
+    //console.log(`[WARNING] Failed to decode Base64 query params: ${err}`);
+  }
+  return null;
+}
+
+
+// Decode all path segments that contain a Base64-encoded query param string (must start with "params;" or end with ";params").
+// This facilitates "URL parameters" without using any of these characters: "?&=#" (to help bypass URL validation)
+function getParamsFromAllBase64Paths(url: URL): URLSearchParams {
+  var allParams: URLSearchParams = new URLSearchParams();
+  for (const segment of url.pathname.split('/')) {
+    if (!segment) {
+      continue;
+    }
+    try {
+      // Parse decoded string as query parameters
+      const params = decodeB64Params(segment);
+      if (params == null) {
+        continue;
+      }
+      allParams = new URLSearchParams([...allParams, ...params]);
+    } catch {
+      // Ignore invalid Base64 or bad encodings
+      continue;
+    }
+  }
+  return allParams;
+}
+
+
 // Check for a path segment that contains a Base64-encoded query param string (must start with "params;" or end with ";params").
 // This facilitates "URL parameters" without using any of these characters: "?&=#" (to help bypass URL validation)
 function getParamFromBase64Path(url: URL, keys: Array<string>, defaultVal: string|null = null): string|null {
@@ -247,27 +382,11 @@ function getParamFromBase64Path(url: URL, keys: Array<string>, defaultVal: strin
       continue;
     }
     try {
-      // Try to decode the segment from base64
-      const decoded = atob(segment); //Buffer.from(segment, 'base64').toString('utf8');
-
-      // Handle "params;" prefix or ";params" suffix
-      let paramStr: string = '';
-      if (decoded.startsWith('p;')) {
-        paramStr = decoded.slice('p;'.length);
-      } else if (decoded.startsWith('params;')) {
-        paramStr = decoded.slice('params;'.length);
-      } else if (decoded.endsWith(';p')) {
-        paramStr = decoded.slice(0, -';p'.length);
-      } else if (decoded.endsWith(';params')) {
-        paramStr = decoded.slice(0, -';params'.length);
-      }
-
-      if (!paramStr) {
+      // Parse decoded string as query parameters
+      const params = decodeB64Params(segment);
+      if (params == null) {
         continue;
       }
-
-      // Parse decoded string as query parameters
-      const params = new URLSearchParams(paramStr);
       for (const key of keys) {
         const value = params.get(key);
         if (value !== null) {
@@ -372,6 +491,14 @@ export default {
       fwdReqBody.body = requestBody;
     } else {
       fwdReqBody.body = null;
+    }
+    //const allB64QueryParams: URLSearchParams = getParamsFromAllBase64Paths(reqUrl);
+    //if (allB64QueryParams && allB64QueryParams.size > 0) {
+    //  fwdReqBody['b64QueryParams'] = queryParamsToObject(allB64QueryParams);
+    //}
+    const decryptedQueryParams = getEncryptedQueryParams(reqUrl);
+    if (decryptedQueryParams && Object.keys(decryptedQueryParams).length > 0) {
+      fwdReqBody['encryptedQueryParams'] = decryptedQueryParams;
     }
     
     // Send an email alert, if desired
